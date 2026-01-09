@@ -1,216 +1,135 @@
+ï»¿using Unity.Mathematics;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class Piece : MonoBehaviour
 {
-    // ÇöÀç ºí·ÏÀÌ ³õÀÏ °ÔÀÓ º¸µå
     public Board board { get; private set; }
-
-    // ÀÌ ºí·ÏÀÇ Å×Æ®·Î¹Ì³ë Á¤º¸ (¸ğ¾ç, Å¸ÀÏ, È¸Àü µ¥ÀÌÅÍ µî)
     public TetrominoData data { get; private set; }
-
-    // ºí·ÏÀ» ±¸¼ºÇÏ´Â °¢ Ä­µéÀÇ À§Ä¡ Á¤º¸
     public Vector3Int[] cells { get; private set; }
-
-    // º¸µå »ó¿¡¼­ ºí·ÏÀÇ ±âÁØ À§Ä¡
     public Vector3Int position { get; private set; }
-
-    // ÇöÀç È¸Àü »óÅÂ (0~3)
     public int rotationIndex { get; private set; }
 
-    // ÀÚµ¿À¸·Î ÇÑ Ä­ ³»·Á°¡´Â ½Ã°£ °£°İ
+    [Header("Timing")]
     public float stepDelay = 1f;
-
-    // ÁÂ¿ì ÀÌµ¿ / ¼ÒÇÁÆ® µå·Ó ½Ã ÀÔ·Â µô·¹ÀÌ
     public float moveDelay = 0.1f;
-
-    // ¹Ù´Ú¿¡ ´êÀº ÈÄ °íÁ¤µÇ±â±îÁö ½Ã°£(¹Ù´Ú¿¡ ´ê¾Æµµ Àá±ñ ÁÂ,¿ìÀÌµ¿ÀÌ³ª È¸Àü °¡´É)
     public float lockDelay = 0.5f;
 
-    // ´ÙÀ½ ÀÚµ¿ ³«ÇÏ ½Ã°£
     private float stepTime;
-
-    // ´ÙÀ½ ÀÌµ¿ °¡´É ½Ã°£
     private float moveTime;
-
-    // ºí·ÏÀÌ ¸ØÃçÀÖ´Â ½Ã°£ ´©Àû
     private float lockTime;
 
-    // ºí·Ï »ı¼º ½Ã ÃÊ±âÈ­ ÇÔ¼ö
+    /* ---------- Init ---------- */
+
     public void Initialize(Board board, Vector3Int position, TetrominoData data)
     {
-        this.data = data;
         this.board = board;
         this.position = position;
+        this.data = data;
 
-        // È¸Àü »óÅÂ ÃÊ±âÈ­
         rotationIndex = 0;
-
-        // ÀÚµ¿ ³«ÇÏ ¹× ÀÌµ¿ ½Ã°£ ¼³Á¤
         stepTime = Time.time + stepDelay;
         moveTime = Time.time + moveDelay;
-
-        // °íÁ¤ Å¸ÀÌ¸Ó ÃÊ±âÈ­
         lockTime = 0f;
 
-        // ¼¿ ¹è¿­ÀÌ ¾øÀ¸¸é »õ·Î »ı¼º
         if (cells == null)
-        {
             cells = new Vector3Int[data.cells.Length];
-        }
 
-        // Å×Æ®·Î¹Ì³ë µ¥ÀÌÅÍ¿¡ ÀÖ´Â ¼¿ Á¤º¸¸¦ º¹»ç
         for (int i = 0; i < cells.Length; i++)
-        {
             cells[i] = (Vector3Int)data.cells[i];
-        }
     }
+
+    /* ---------- Update ---------- */
 
     private void Update()
     {
-        // ÀÌÀü ÇÁ·¹ÀÓ¿¡ ±×·ÁÁø ºí·ÏÀ» º¸µå¿¡¼­ Áö¿î´Ù
         board.Clear(this);
-
-        // ºí·ÏÀÌ ¿òÁ÷ÀÌÁö ¾Ê°í ¸Ó¹® ½Ã°£À» ´©Àû
         lockTime += Time.deltaTime;
 
-        if (Input.GetKeyDown(KeyCode.Q))
-        {
-            // ¹İ½Ã°è ¹æÇâ È¸Àü
-            Rotate(-1);
-        }
-        else if (Input.GetKeyDown(KeyCode.E))
-        {
-            // ½Ã°è ¹æÇâ È¸Àü
-            Rotate(1);
-        }
+        if (Input.GetKeyDown(KeyCode.Q)) Rotate(-1);
+        else if (Input.GetKeyDown(KeyCode.E)) Rotate(1);
 
-        // ½ºÆäÀÌ½º¹Ù¸¦ ´©¸£¸é Áï½Ã ¹Ù´Ú±îÁö ¶³¾î¶ß¸²
         if (Input.GetKeyDown(KeyCode.Space))
-        {
             HardDrop();
-        }
 
-        // ÀÌµ¿ µô·¹ÀÌ°¡ Áö³­ °æ¿ì¿¡¸¸ ÀÔ·Â Çã¿ë
         if (Time.time > moveTime)
-        {
             HandleMoveInputs();
-        }
 
-        // ÀÏÁ¤ ½Ã°£ÀÌ Áö³ª¸é ÀÚµ¿À¸·Î ÇÑ Ä­ ¾Æ·¡·Î ÀÌµ¿
         if (Time.time > stepTime)
-        {
             Step();
-        }
 
-        // ÇöÀç À§Ä¡¿¡ ºí·ÏÀ» ´Ù½Ã ±×¸°´Ù
         board.Set(this);
     }
 
-    // ÁÂ¿ì ÀÌµ¿ ¹× ¼ÒÇÁÆ® µå·Ó ÀÔ·Â Ã³¸®
+    /* ---------- Movement ---------- */
+
     private void HandleMoveInputs()
     {
-        // S Å°¸¦ ´©¸£¸é ¼ÒÇÁÆ® µå·Ó (ÃµÃµÈ÷ ¾Æ·¡ ÀÌµ¿)
         if (Input.GetKey(KeyCode.S))
         {
             if (Move(Vector2Int.down))
-            {
-                // ÀÚµ¿ ³«ÇÏ¿Í Áßº¹µÇÁö ¾Êµµ·Ï ½Ã°£ °»½Å
                 stepTime = Time.time + stepDelay;
-            }
         }
 
-        // A / D Å°·Î ÁÂ¿ì ÀÌµ¿
         if (Input.GetKey(KeyCode.A))
-        {
             Move(Vector2Int.left);
-        }
         else if (Input.GetKey(KeyCode.D))
-        {
             Move(Vector2Int.right);
-        }
     }
 
-    // ÀÚµ¿ ³«ÇÏ Ã³¸® ÇÔ¼ö
     private void Step()
     {
-        // ´ÙÀ½ ÀÚµ¿ ³«ÇÏ ½Ã°£ ¼³Á¤
         stepTime = Time.time + stepDelay;
-
-        // ÇÑ Ä­ ¾Æ·¡·Î ÀÌµ¿ ½Ãµµ
         Move(Vector2Int.down);
 
-        // ºí·ÏÀÌ ¿À·¡ ¸ØÃç ÀÖÀ¸¸é °íÁ¤
         if (lockTime >= lockDelay)
-        {
             Lock();
-        }
     }
 
-    // ÇÏµå µå·Ó Ã³¸®
-    private void HardDrop()
-    {
-        // ´õ ÀÌ»ó ³»·Á°¥ ¼ö ¾øÀ» ¶§±îÁö °è¼Ó ¾Æ·¡·Î ÀÌµ¿
-        while (Move(Vector2Int.down))
-        {
-            continue;
-        }
-
-        // Áï½Ã °íÁ¤
-        Lock();
-    }
-
-    // ºí·Ï °íÁ¤ Ã³¸®
-    private void Lock()
-    {
-        // º¸µå¿¡ ÃÖÁ¾ À§Ä¡·Î ºí·Ï °íÁ¤
-        board.Set(this);
-
-        // ¿Ï¼ºµÈ ÁÙ Á¦°Å
-        board.ClearLines();
-
-        // »õ·Î¿î ºí·Ï »ı¼º
-        board.SpawnPiece();
-    }
-
-    // ½ÇÁ¦ ÀÌµ¿ Ã³¸® ÇÔ¼ö
     private bool Move(Vector2Int translation)
     {
-        // ÀÌµ¿ÇÒ »õ·Î¿î À§Ä¡ °è»ê
         Vector3Int newPosition = position;
         newPosition.x += translation.x;
         newPosition.y += translation.y;
 
-        // ÇØ´ç À§Ä¡°¡ º¸µå ¾È¿¡¼­ À¯È¿ÇÑÁö °Ë»ç
         bool valid = board.IsValidPosition(this, newPosition);
 
-        // ÀÌµ¿ÀÌ °¡´ÉÇÒ ¶§¸¸ À§Ä¡ °»½Å
         if (valid)
         {
             position = newPosition;
-
-            // ´ÙÀ½ ÀÌµ¿ µô·¹ÀÌ ¼³Á¤
             moveTime = Time.time + moveDelay;
-
-            // ¿òÁ÷¿´À¸¹Ç·Î °íÁ¤ Å¸ÀÌ¸Ó ¸®¼Â
             lockTime = 0f;
         }
 
         return valid;
     }
 
-    // È¸Àü Ã³¸® ÇÔ¼ö
+    private void HardDrop()
+    {
+        while (Move(Vector2Int.down)) { }
+        Lock();
+    }
+
+    /* ---------- Lock ---------- */
+
+    private void Lock()
+    {
+        board.Set(this);
+
+        int clearedLines = board.ClearLines();
+        GameManager.Instance.OnLinesCleared(clearedLines);
+        GameManager.Instance.SpawnFromNext();
+    }   // â­ ì´ ì¤‘ê´„í˜¸ê°€ ë¹ ì ¸ìˆì—ˆìŒ
+
+    /* ---------- Rotation ---------- */
+
     private void Rotate(int direction)
     {
-        // È¸Àü ½ÇÆĞ ½Ã µÇµ¹¸®±â À§ÇØ ±âÁ¸ È¸Àü°ª ÀúÀå
         int originalRotation = rotationIndex;
-
-        // È¸Àü ÀÎµ¦½º º¯°æ (0~3 ¹üÀ§ À¯Áö)
         rotationIndex = Wrap(rotationIndex + direction, 0, 4);
 
-        // ½ÇÁ¦ ¼¿ ÁÂÇ¥ È¸Àü
         ApplyRotationMatrix(direction);
 
-        // º®Å± Å×½ºÆ® ½ÇÆĞ ½Ã È¸Àü Ãë¼Ò
         if (!TestWallKicks(rotationIndex, direction))
         {
             rotationIndex = originalRotation;
@@ -218,7 +137,6 @@ public class Piece : MonoBehaviour
         }
     }
 
-    // È¸Àü Çà·ÄÀ» ÀÌ¿ëÇØ ¼¿ ÁÂÇ¥ °è»ê
     private void ApplyRotationMatrix(int direction)
     {
         float[] matrix = Data.RotationMatrix;
@@ -228,71 +146,47 @@ public class Piece : MonoBehaviour
             Vector3 cell = cells[i];
             int x, y;
 
-            switch (data.tetromino)
+            if (data.tetromino == Tetromino.I || data.tetromino == Tetromino.O)
             {
-                case Tetromino.I:
-                case Tetromino.O:
-                    // I, O ºí·ÏÀº Áß½É º¸Á¤ ÈÄ È¸Àü
-                    cell.x -= 0.5f;
-                    cell.y -= 0.5f;
-                    x = Mathf.CeilToInt((cell.x * matrix[0] * direction) + (cell.y * matrix[1] * direction));
-                    y = Mathf.CeilToInt((cell.x * matrix[2] * direction) + (cell.y * matrix[3] * direction));
-                    break;
-
-                default:
-                    // ÀÏ¹İ ºí·Ï È¸Àü
-                    x = Mathf.RoundToInt((cell.x * matrix[0] * direction) + (cell.y * matrix[1] * direction));
-                    y = Mathf.RoundToInt((cell.x * matrix[2] * direction) + (cell.y * matrix[3] * direction));
-                    break;
+                cell.x -= 0.5f;
+                cell.y -= 0.5f;
+                x = Mathf.CeilToInt((cell.x * matrix[0] * direction) + (cell.y * matrix[1] * direction));
+                y = Mathf.CeilToInt((cell.x * matrix[2] * direction) + (cell.y * matrix[3] * direction));
+            }
+            else
+            {
+                x = Mathf.RoundToInt((cell.x * matrix[0] * direction) + (cell.y * matrix[1] * direction));
+                y = Mathf.RoundToInt((cell.x * matrix[2] * direction) + (cell.y * matrix[3] * direction));
             }
 
             cells[i] = new Vector3Int(x, y, 0);
         }
     }
 
-    // º®¿¡ °É·ÈÀ» ¶§ È¸ÀüÀ» º¸Á¤ÇÏ´Â Å×½ºÆ®
     private bool TestWallKicks(int rotationIndex, int rotationDirection)
     {
         int wallKickIndex = GetWallKickIndex(rotationIndex, rotationDirection);
 
         for (int i = 0; i < data.wallKicks.GetLength(1); i++)
         {
-            Vector2Int translation = data.wallKicks[wallKickIndex, i];
-
-            // º¸Á¤ ÀÌµ¿ÀÌ ¼º°øÇÏ¸é È¸Àü ¼º°ø
-            if (Move(translation))
-            {
+            if (Move(data.wallKicks[wallKickIndex, i]))
                 return true;
-            }
         }
 
-        // ¸ğµç º¸Á¤ ½ÇÆĞ
         return false;
     }
 
-    // ÇöÀç È¸Àü¿¡ ¸Â´Â º®Å± ÀÎµ¦½º °è»ê
     private int GetWallKickIndex(int rotationIndex, int rotationDirection)
     {
-        int wallKickIndex = rotationIndex * 2;
-
-        if (rotationDirection < 0)
-        {
-            wallKickIndex--;
-        }
-
-        return Wrap(wallKickIndex, 0, data.wallKicks.GetLength(0));
+        int index = rotationIndex * 2;
+        if (rotationDirection < 0) index--;
+        return Wrap(index, 0, data.wallKicks.GetLength(0));
     }
 
-    // °ªÀÌ ¹üÀ§¸¦ ³ÑÁö ¾Êµµ·Ï ¼øÈ¯ Ã³¸®
     private int Wrap(int input, int min, int max)
     {
         if (input < min)
-        {
             return max - (min - input) % (max - min);
-        }
-        else
-        {
-            return min + (input - min) % (max - min);
-        }
+        return min + (input - min) % (max - min);
     }
 }
