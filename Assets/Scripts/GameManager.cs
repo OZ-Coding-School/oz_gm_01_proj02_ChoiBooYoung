@@ -1,81 +1,111 @@
 using UnityEngine;
 
-/// <summary>
-/// 테트리스 게임 규칙 / 점수 / 레벨 / 상태 관리
-/// Board 기준으로 동작하도록 제작됨
-/// </summary>
 public class GameManager : MonoBehaviour
 {
+    public static GameManager Instance { get; private set; }
+
     [Header("Reference")]
-    [SerializeField] private UIManager uiManager;
     [SerializeField] private Board board;
+    [SerializeField] private UIManager ui;
 
     [Header("Game State")]
     public int score { get; private set; }
     public int level { get; private set; }
     public int lines { get; private set; }
 
-    private bool isGameOver;
+    [Header("Level Config")]
+    [SerializeField] private int linesPerLevel = 10;
+    [SerializeField] private float baseStepDelay = 1f;
+
+    private TetrominoData nextData;
+    private TetrominoData? holdData = null;
+    private bool canHold = true;
+
+    private void Awake()
+    {
+        Instance = this;
+    }
 
     private void Start()
     {
-        StartGame();
-    }
-
-    /// <summary>
-    /// 게임 시작 / 재시작
-    /// </summary>
-    public void StartGame()
-    {
         score = 0;
-        level = 1;
+        level = 0;
         lines = 0;
-        isGameOver = false;
 
-        uiManager.UpdateScore(score);
-        uiManager.UpdateLevel(level);
-        uiManager.UpdateLines(lines);
+        UpdateUI();
+
+        GenerateNext();
+        SpawnFromNext();
     }
 
-    /// <summary>
-    /// Board에서 줄 제거 후 호출
-    /// </summary>
-    public void OnLinesCleared(int clearedLines)
+    /* ---------- Spawn ---------- */
+
+    private void GenerateNext()
     {
-        if (isGameOver || clearedLines == 0) return;
+        nextData = board.tetrominoes[
+            Random.Range(0, board.tetrominoes.Length)
+        ];
 
-        lines += clearedLines;
-        score += CalculateScore(clearedLines);
-        level = (lines / 10) + 1;
-
-        uiManager.UpdateScore(score);
-        uiManager.UpdateLevel(level);
-        uiManager.UpdateLines(lines);
+        ui.SetNextPiece(nextData);
     }
 
-    /// <summary>
-    /// 점수 계산 규칙
-    /// </summary>
-    private int CalculateScore(int clearedLines)
+    public void SpawnFromNext()
     {
-        switch (clearedLines)
+        board.SpawnPiece(nextData);
+        GenerateNext();
+        canHold = true;
+
+        UpdateSpeed();
+    }
+
+    /* ---------- Score ---------- */
+
+    public void OnLinesCleared(int cleared)
+    {
+        if (cleared == 0) return;
+
+        lines += cleared;
+        score += CalculateScore(cleared);
+
+        level = lines / linesPerLevel;
+
+        UpdateSpeed();
+        UpdateUI();
+    }
+
+    private int CalculateScore(int cleared)
+    {
+        int baseScore = cleared switch
         {
-            case 1: return 100 * level;
-            case 2: return 300 * level;
-            case 3: return 500 * level;
-            case 4: return 800 * level;
-            default: return 0;
-        }
+            1 => 100,
+            2 => 300,
+            3 => 500,
+            4 => 800,
+            _ => 0
+        };
+
+        return baseScore * (level + 1);
     }
 
-    /// <summary>
-    /// 게임 오버 처리
-    /// </summary>
+    private void UpdateSpeed()
+    {
+        if (board.activePiece == null) return;
+
+        board.activePiece.stepDelay =
+            Mathf.Max(0.1f, baseStepDelay - level * 0.1f);
+    }
+
+    private void UpdateUI()
+    {
+        ui.UpdateScore(score);
+        ui.UpdateLevel(level);
+        ui.UpdateLines(lines);
+    }
+
+    /* ---------- Game Over ---------- */
+
     public void GameOver()
     {
-        if (isGameOver) return;
-
-        isGameOver = true;
-        uiManager.ShowGameOver();
+        ui.ShowGameOver();
     }
 }
